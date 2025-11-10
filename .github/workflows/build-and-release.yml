@@ -123,10 +123,13 @@ jobs:
               --enable-seccomp \
               --enable-static && \
             make -j\$(nproc) && \
+            strip ctags && \
             echo 'Checking binary dependencies:' && \
             ldd ctags || true && \
             echo 'Required glibc version:' && \
-            objdump -T ctags | grep GLIBC | sed 's/.*GLIBC_\([.0-9]*\).*/\1/g' | sort -Vu | tail -1 || true
+            objdump -T ctags | grep GLIBC | sed 's/.*GLIBC_\([.0-9]*\).*/\1/g' | sort -Vu | tail -1 || true && \
+            echo 'Binary size after strip:' && \
+            ls -lh ctags
           "
 
       - name: Build universal-ctags (macOS)
@@ -167,28 +170,35 @@ jobs:
               --enable-seccomp \
               --enable-static && \
             make -j\$(nproc) && \
+            strip ctags && \
             echo 'Checking binary dependencies:' && \
             ldd ctags || true && \
             echo 'Required glibc version:' && \
-            objdump -T ctags | grep GLIBC | sed 's/.*GLIBC_\([.0-9]*\).*/\1/g' | sort -Vu | tail -1 || true
+            objdump -T ctags | grep GLIBC | sed 's/.*GLIBC_\([.0-9]*\).*/\1/g' | sort -Vu | tail -1 || true && \
+            echo 'Binary size after strip:' && \
+            ls -lh ctags
           "
 
       - name: Create binary package
         run: |
           mkdir -p dist
-          if [ "${{ matrix.use_qemu }}" = "true" ]; then
-            # For cross-compiled ARM64 Linux
+
+          # The ctags binary should be in the current directory after build
+          # (either from native macOS build or from Docker container via mounted volume)
+          if [ -f ctags ]; then
             cp ctags dist/ctags
           else
-            cp ctags dist/ctags
+            echo "Error: ctags binary not found in current directory"
+            ls -la
+            exit 1
           fi
 
           # Strip the binary to reduce size
-          if [[ "${{ matrix.os }}" == ubuntu* ]]; then
-            if [ "${{ matrix.use_qemu }}" != "true" ]; then
-              strip dist/ctags
-            fi
-          else
+          # For Linux builds in Docker, we need to strip inside the container
+          if [[ "${{ matrix.os }}" == ubuntu* ]] && [[ "${{ matrix.container }}" != "" ]]; then
+            # For Docker-based Linux builds, strip was already done in container if possible
+            echo "Binary built in Docker container, skipping strip on host"
+          elif [[ "${{ matrix.os }}" == macos* ]]; then
             strip dist/ctags
           fi
 
