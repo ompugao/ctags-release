@@ -1,7 +1,7 @@
 # Universal Ctags Binary Releases
-
 This repository provides pre-built binaries of [Universal Ctags](https://github.com/universal-ctags/ctags) for easy installation via [mise](https://mise.jdx.dev/) (formerly rtx).
 
+[![Build and Release Universal Ctags](https://github.com/ompugao/ctags-release/actions/workflows/build-and-release.yml/badge.svg)](https://github.com/ompugao/ctags-release/actions/workflows/build-and-release.yml)
 ## Features
 
 - Automated daily checks for new Universal Ctags releases
