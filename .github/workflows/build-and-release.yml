@@ -55,14 +55,16 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-20.04
+          - os: ubuntu-latest
             target: linux-x86_64
             arch: x86_64
-          - os: ubuntu-20.04
+            container: ubuntu:20.04
+          - os: ubuntu-latest
             target: linux-aarch64
             arch: aarch64
             use_qemu: true
-          - os: macos-12
+            container: ubuntu:20.04
+          - os: macos-13
             target: darwin-x86_64
             arch: x86_64
           - os: macos-14
@@ -82,19 +84,6 @@ jobs:
           repository: universal-ctags/ctags
           ref: ${{ needs.check-release.outputs.latest_tag }}
 
-      - name: Install dependencies (Linux)
-        if: startsWith(matrix.os, 'ubuntu')
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            autoconf \
-            automake \
-            pkg-config \
-            libjansson-dev \
-            libyaml-dev \
-            libxml2-dev \
-            libseccomp-dev \
-            python3-docutils
 
       - name: Install dependencies (macOS)
         if: startsWith(matrix.os, 'macos')
@@ -107,39 +96,10 @@ jobs:
             libyaml \
             docutils
 
-      - name: Build universal-ctags (Linux native)
-        if: startsWith(matrix.os, 'ubuntu') && !matrix.use_qemu
+      - name: Build universal-ctags (Linux x86_64 in Docker)
+        if: matrix.container && matrix.arch == 'x86_64'
         run: |
-          ./autogen.sh
-          # Try to build with static libraries where possible for better compatibility
-          LDFLAGS="-static-libgcc" ./configure \
-            --prefix=/usr/local \
-            --enable-json \
-            --enable-yaml \
-            --enable-xml \
-            --enable-seccomp \
-            --enable-static
-          make -j$(nproc)
-          # Check glibc version requirements
-          echo "Checking binary dependencies:"
-          ldd ctags || true
-          objdump -T ctags | grep GLIBC | sed 's/.*GLIBC_\([.0-9]*\).*/\1/g' | sort -Vu | tail -1 || true
-
-      - name: Build universal-ctags (macOS)
-        if: startsWith(matrix.os, 'macos')
-        run: |
-          ./autogen.sh
-          ./configure \
-            --prefix=/usr/local \
-            --enable-json \
-            --enable-yaml \
-            --enable-xml
-          make -j$(sysctl -n hw.ncpu)
-
-      - name: Build universal-ctags (cross-compile for ARM64)
-        if: matrix.use_qemu
-        run: |
-          docker run --rm -v $PWD:/src --platform linux/arm64 ubuntu:20.04 bash -c "
+          docker run --rm -v $PWD:/src ${{ matrix.container }} bash -c "
             export DEBIAN_FRONTEND=noninteractive && \
             apt-get update && \
             apt-get install -y --no-install-recommends \
@@ -164,7 +124,53 @@ jobs:
               --enable-static && \
             make -j\$(nproc) && \
             echo 'Checking binary dependencies:' && \
-            ldd ctags || true
+            ldd ctags || true && \
+            echo 'Required glibc version:' && \
+            objdump -T ctags | grep GLIBC | sed 's/.*GLIBC_\([.0-9]*\).*/\1/g' | sort -Vu | tail -1 || true
+          "
+
+      - name: Build universal-ctags (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          ./autogen.sh
+          ./configure \
+            --prefix=/usr/local \
+            --enable-json \
+            --enable-yaml \
+            --enable-xml
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Build universal-ctags (Linux ARM64 in Docker)
+        if: matrix.use_qemu && matrix.container
+        run: |
+          docker run --rm -v $PWD:/src --platform linux/arm64 ${{ matrix.container }} bash -c "
+            export DEBIAN_FRONTEND=noninteractive && \
+            apt-get update && \
+            apt-get install -y --no-install-recommends \
+              build-essential \
+              autoconf \
+              automake \
+              pkg-config \
+              libjansson-dev \
+              libyaml-dev \
+              libxml2-dev \
+              libseccomp-dev \
+              python3-docutils \
+              binutils && \
+            cd /src && \
+            ./autogen.sh && \
+            LDFLAGS=\"-static-libgcc\" ./configure \
+              --prefix=/usr/local \
+              --enable-json \
+              --enable-yaml \
+              --enable-xml \
+              --enable-seccomp \
+              --enable-static && \
+            make -j\$(nproc) && \
+            echo 'Checking binary dependencies:' && \
+            ldd ctags || true && \
+            echo 'Required glibc version:' && \
+            objdump -T ctags | grep GLIBC | sed 's/.*GLIBC_\([.0-9]*\).*/\1/g' | sort -Vu | tail -1 || true
           "
 
       - name: Create binary package
@@ -252,7 +258,7 @@ jobs:
             ## Supported Platforms
             - Linux x86_64 (glibc 2.31+, Ubuntu 20.04+, Debian 11+, RHEL 8+)
             - Linux ARM64/aarch64 (glibc 2.31+)
-            - macOS x86_64 (Intel, macOS 12+)
+            - macOS x86_64 (Intel, macOS 13+)
             - macOS ARM64 (Apple Silicon, macOS 14+)
 
             ## Compatibility
