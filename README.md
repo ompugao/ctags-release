@@ -79,12 +79,22 @@ ctags --version
 
 ## Supported Platforms
 
-| Platform | Architecture | Binary Name |
-|----------|-------------|-------------|
-| Linux | x86_64 | `ctags-*-linux-x86_64.tar.gz` |
-| Linux | ARM64 | `ctags-*-linux-aarch64.tar.gz` |
-| macOS | x86_64 (Intel) | `ctags-*-darwin-x86_64.tar.gz` |
-| macOS | ARM64 (Apple Silicon) | `ctags-*-darwin-aarch64.tar.gz` |
+| Platform | Architecture | Binary Name | Minimum Requirements |
+|----------|-------------|-------------|---------------------|
+| Linux | x86_64 | `ctags-*-linux-x86_64.tar.gz` | glibc 2.31+ (Ubuntu 20.04+, Debian 11+, RHEL 8+) |
+| Linux | ARM64 | `ctags-*-linux-aarch64.tar.gz` | glibc 2.31+ |
+| macOS | x86_64 (Intel) | `ctags-*-darwin-x86_64.tar.gz` | macOS 12+ |
+| macOS | ARM64 (Apple Silicon) | `ctags-*-darwin-aarch64.tar.gz` | macOS 14+ |
+
+## Compatibility Notes
+
+- **Linux binaries** are built on Ubuntu 20.04 LTS to ensure compatibility with older systems
+- Requires **glibc 2.31** or newer (check with `ldd --version`)
+- Uses static linking where possible to minimize dependency issues
+- If you encounter library errors on Linux, verify your glibc version:
+  ```bash
+  ldd --version | head -1
+  ```
 
 ## Usage
 

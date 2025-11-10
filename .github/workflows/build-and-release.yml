@@ -55,14 +55,14 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-20.04
             target: linux-x86_64
             arch: x86_64
-          - os: ubuntu-latest
+          - os: ubuntu-20.04
             target: linux-aarch64
             arch: aarch64
             use_qemu: true
-          - os: macos-14
+          - os: macos-12
             target: darwin-x86_64
             arch: x86_64
           - os: macos-14
@@ -111,13 +111,19 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu') && !matrix.use_qemu
         run: |
           ./autogen.sh
-          ./configure \
+          # Try to build with static libraries where possible for better compatibility
+          LDFLAGS="-static-libgcc" ./configure \
             --prefix=/usr/local \
             --enable-json \
             --enable-yaml \
             --enable-xml \
-            --enable-seccomp
+            --enable-seccomp \
+            --enable-static
           make -j$(nproc)
+          # Check glibc version requirements
+          echo "Checking binary dependencies:"
+          ldd ctags || true
+          objdump -T ctags | grep GLIBC | sed 's/.*GLIBC_\([.0-9]*\).*/\1/g' | sort -Vu | tail -1 || true
 
       - name: Build universal-ctags (macOS)
         if: startsWith(matrix.os, 'macos')
@@ -145,11 +151,20 @@ jobs:
               libyaml-dev \
               libxml2-dev \
               libseccomp-dev \
-              python3-docutils && \
+              python3-docutils \
+              binutils && \
             cd /src && \
             ./autogen.sh && \
-            ./configure --prefix=/usr/local --enable-json --enable-yaml --enable-xml --enable-seccomp && \
-            make -j\$(nproc)
+            LDFLAGS=\"-static-libgcc\" ./configure \
+              --prefix=/usr/local \
+              --enable-json \
+              --enable-yaml \
+              --enable-xml \
+              --enable-seccomp \
+              --enable-static && \
+            make -j\$(nproc) && \
+            echo 'Checking binary dependencies:' && \
+            ldd ctags || true
           "
 
       - name: Create binary package
@@ -235,10 +250,16 @@ jobs:
             ```
 
             ## Supported Platforms
-            - Linux x86_64
-            - Linux ARM64 (aarch64)
-            - macOS x86_64 (Intel)
-            - macOS ARM64 (Apple Silicon)
+            - Linux x86_64 (glibc 2.31+, Ubuntu 20.04+, Debian 11+, RHEL 8+)
+            - Linux ARM64/aarch64 (glibc 2.31+)
+            - macOS x86_64 (Intel, macOS 12+)
+            - macOS ARM64 (Apple Silicon, macOS 14+)
+
+            ## Compatibility
+            - Linux binaries are built on Ubuntu 20.04 for maximum compatibility
+            - Requires glibc 2.31 or newer (Ubuntu 20.04+, Debian 11+, RHEL 8+, etc.)
+            - Static linking used where possible to minimize dependency issues
+            - If you encounter library errors, ensure your system meets the minimum requirements
 
             ## Features
             This build includes support for:
