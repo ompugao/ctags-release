@@ -55,14 +55,14 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-20.04
+          - os: ubuntu-latest
             target: linux-x86_64
             arch: x86_64
           - os: ubuntu-latest
             target: linux-aarch64
             arch: aarch64
             use_qemu: true
-          - os: macos-12
+          - os: macos-14
             target: darwin-x86_64
             arch: x86_64
           - os: macos-14
