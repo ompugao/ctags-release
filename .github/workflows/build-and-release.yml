@@ -1,0 +1,237 @@
+name: Build and Release Universal Ctags
+
+on:
+  schedule:
+    # Check for new releases daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force build even if no new release'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      latest_tag: ${{ steps.check.outputs.latest_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for new release
+        id: check
+        run: |
+          # Get the latest release from universal-ctags
+          LATEST_UPSTREAM=$(curl -s https://api.github.com/repos/universal-ctags/ctags/releases/latest | jq -r .tag_name)
+          echo "Latest upstream release: $LATEST_UPSTREAM"
+
+          # Get our latest release
+          LATEST_OURS=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
+          if [ "$LATEST_OURS" = "null" ]; then
+            LATEST_OURS="none"
+          fi
+          echo "Our latest release: $LATEST_OURS"
+
+          # Check if we need to build
+          if [ "$LATEST_UPSTREAM" != "$LATEST_OURS" ] || [ "${{ github.event.inputs.force_build }}" = "true" ]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "latest_tag=$LATEST_UPSTREAM" >> $GITHUB_OUTPUT
+            echo "New release detected or force build requested. Will build $LATEST_UPSTREAM"
+          else
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            echo "No new release detected"
+          fi
+
+  build:
+    needs: check-release
+    if: needs.check-release.outputs.should_build == 'true'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            target: linux-x86_64
+            arch: x86_64
+          - os: ubuntu-latest
+            target: linux-aarch64
+            arch: aarch64
+            use_qemu: true
+          - os: macos-12
+            target: darwin-x86_64
+            arch: x86_64
+          - os: macos-14
+            target: darwin-aarch64
+            arch: aarch64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Setup QEMU
+        if: matrix.use_qemu
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Checkout universal-ctags
+        uses: actions/checkout@v4
+        with:
+          repository: universal-ctags/ctags
+          ref: ${{ needs.check-release.outputs.latest_tag }}
+
+      - name: Install dependencies (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf \
+            automake \
+            pkg-config \
+            libjansson-dev \
+            libyaml-dev \
+            libxml2-dev \
+            libseccomp-dev \
+            python3-docutils
+
+      - name: Install dependencies (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          brew install \
+            autoconf \
+            automake \
+            pkg-config \
+            jansson \
+            libyaml \
+            docutils
+
+      - name: Build universal-ctags (native)
+        if: '!matrix.use_qemu'
+        run: |
+          ./autogen.sh
+          ./configure \
+            --prefix=/usr/local \
+            --enable-json \
+            --enable-yaml \
+            --enable-xml \
+            --enable-seccomp
+          make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+
+      - name: Build universal-ctags (cross-compile for ARM64)
+        if: matrix.use_qemu
+        run: |
+          docker run --rm -v $PWD:/src --platform linux/arm64 ubuntu:20.04 bash -c "
+            apt-get update && \
+            apt-get install -y build-essential autoconf automake pkg-config \
+              libjansson-dev libyaml-dev libxml2-dev libseccomp-dev python3-docutils && \
+            cd /src && \
+            ./autogen.sh && \
+            ./configure --prefix=/usr/local --enable-json --enable-yaml --enable-xml --enable-seccomp && \
+            make -j\$(nproc)
+          "
+
+      - name: Create binary package
+        run: |
+          mkdir -p dist
+          if [ "${{ matrix.use_qemu }}" = "true" ]; then
+            # For cross-compiled ARM64 Linux
+            cp ctags dist/ctags
+          else
+            cp ctags dist/ctags
+          fi
+
+          # Strip the binary to reduce size
+          if [[ "${{ matrix.os }}" == ubuntu* ]]; then
+            if [ "${{ matrix.use_qemu }}" != "true" ]; then
+              strip dist/ctags
+            fi
+          else
+            strip dist/ctags
+          fi
+
+          # Create tarball
+          cd dist
+          tar czf ctags-${{ needs.check-release.outputs.latest_tag }}-${{ matrix.target }}.tar.gz ctags
+
+          # Also create a checksum
+          if [[ "${{ matrix.os }}" == ubuntu* ]]; then
+            sha256sum ctags-${{ needs.check-release.outputs.latest_tag }}-${{ matrix.target }}.tar.gz > ctags-${{ needs.check-release.outputs.latest_tag }}-${{ matrix.target }}.tar.gz.sha256
+          else
+            shasum -a 256 ctags-${{ needs.check-release.outputs.latest_tag }}-${{ matrix.target }}.tar.gz > ctags-${{ needs.check-release.outputs.latest_tag }}-${{ matrix.target }}.tar.gz.sha256
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctags-${{ matrix.target }}
+          path: dist/*
+
+  release:
+    needs: [check-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: ls -la artifacts/*/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.check-release.outputs.latest_tag }}
+          name: Universal Ctags ${{ needs.check-release.outputs.latest_tag }}
+          body: |
+            Universal Ctags binary release built from upstream version ${{ needs.check-release.outputs.latest_tag }}
+
+            ## Installation
+
+            ### Using mise
+
+            Add to your `.mise.toml`:
+            ```toml
+            [tools]
+            "github:ompugao/ctags-release" = "latest"
+            ```
+
+            Or install directly:
+            ```bash
+            mise use github:ompugao/ctags-release@latest
+            ```
+
+            ### Manual installation
+
+            Download the appropriate binary for your platform and extract:
+            ```bash
+            tar xzf ctags-*.tar.gz
+            sudo mv ctags /usr/local/bin/
+            ```
+
+            ## Supported Platforms
+            - Linux x86_64
+            - Linux ARM64 (aarch64)
+            - macOS x86_64 (Intel)
+            - macOS ARM64 (Apple Silicon)
+
+            ## Features
+            This build includes support for:
+            - JSON output
+            - YAML output
+            - XML output
+            - Seccomp sandbox (Linux only)
+
+            ## Source
+            Built from: https://github.com/universal-ctags/ctags/releases/tag/${{ needs.check-release.outputs.latest_tag }}
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.sha256
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
