@@ -113,16 +113,15 @@ jobs:
               libseccomp-dev \
               python3-docutils \
               binutils \
-              libiconv-hook-dev && \
+              git && \
             cd /src && \
             ./autogen.sh && \
-            LDFLAGS=\"-static-libgcc\" ./configure \
+            ./configure \
               --prefix=/usr/local \
               --enable-json \
               --enable-yaml \
               --enable-xml \
-              --enable-seccomp \
-              --enable-static && \
+              --enable-seccomp && \
             make -j\$(nproc) && \
             strip ctags && \
             echo 'Checking binary dependencies:' && \
@@ -161,16 +160,15 @@ jobs:
               libseccomp-dev \
               python3-docutils \
               binutils \
-              libiconv-hook-dev && \
+              git && \
             cd /src && \
             ./autogen.sh && \
-            LDFLAGS=\"-static-libgcc\" ./configure \
+            ./configure \
               --prefix=/usr/local \
               --enable-json \
               --enable-yaml \
               --enable-xml \
-              --enable-seccomp \
-              --enable-static && \
+              --enable-seccomp && \
             make -j\$(nproc) && \
             strip ctags && \
             echo 'Checking binary dependencies:' && \
