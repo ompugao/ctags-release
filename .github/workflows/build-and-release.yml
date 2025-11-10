@@ -67,7 +67,7 @@ jobs:
           - os: macos-13
             target: darwin-x86_64
             arch: x86_64
-          - os: macos-14
+          - os: macos-latest
             target: darwin-aarch64
             arch: aarch64
     runs-on: ${{ matrix.os }}
@@ -112,7 +112,8 @@ jobs:
               libxml2-dev \
               libseccomp-dev \
               python3-docutils \
-              binutils && \
+              binutils \
+              libiconv-hook-dev && \
             cd /src && \
             ./autogen.sh && \
             LDFLAGS=\"-static-libgcc\" ./configure \
@@ -159,7 +160,8 @@ jobs:
               libxml2-dev \
               libseccomp-dev \
               python3-docutils \
-              binutils && \
+              binutils \
+              libiconv-hook-dev && \
             cd /src && \
             ./autogen.sh && \
             LDFLAGS=\"-static-libgcc\" ./configure \
@@ -269,7 +271,7 @@ jobs:
             - Linux x86_64 (glibc 2.31+, Ubuntu 20.04+, Debian 11+, RHEL 8+)
             - Linux ARM64/aarch64 (glibc 2.31+)
             - macOS x86_64 (Intel, macOS 13+)
-            - macOS ARM64 (Apple Silicon, macOS 14+)
+            - macOS ARM64 (Apple Silicon, macOS 13+)
 
             ## Compatibility
             - Linux binaries are built on Ubuntu 20.04 for maximum compatibility

@@ -84,7 +84,7 @@ ctags --version
 | Linux | x86_64 | `ctags-*-linux-x86_64.tar.gz` | glibc 2.31+ (Ubuntu 20.04+, Debian 11+, RHEL 8+) |
 | Linux | ARM64 | `ctags-*-linux-aarch64.tar.gz` | glibc 2.31+ |
 | macOS | x86_64 (Intel) | `ctags-*-darwin-x86_64.tar.gz` | macOS 13+ |
-| macOS | ARM64 (Apple Silicon) | `ctags-*-darwin-aarch64.tar.gz` | macOS 14+ |
+| macOS | ARM64 (Apple Silicon) | `ctags-*-darwin-aarch64.tar.gz` | macOS 13+ |
 
 ## Compatibility Notes
 
