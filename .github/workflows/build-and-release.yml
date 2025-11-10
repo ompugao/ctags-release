@@ -107,8 +107,8 @@ jobs:
             libyaml \
             docutils
 
-      - name: Build universal-ctags (native)
-        if: '!matrix.use_qemu'
+      - name: Build universal-ctags (Linux native)
+        if: startsWith(matrix.os, 'ubuntu') && !matrix.use_qemu
         run: |
           ./autogen.sh
           ./configure \
@@ -117,7 +117,18 @@ jobs:
             --enable-yaml \
             --enable-xml \
             --enable-seccomp
-          make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+          make -j$(nproc)
+
+      - name: Build universal-ctags (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          ./autogen.sh
+          ./configure \
+            --prefix=/usr/local \
+            --enable-json \
+            --enable-yaml \
+            --enable-xml
+          make -j$(sysctl -n hw.ncpu)
 
       - name: Build universal-ctags (cross-compile for ARM64)
         if: matrix.use_qemu
