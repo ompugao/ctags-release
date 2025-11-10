@@ -1,0 +1,25 @@
+# mise
+.mise.toml
+.mise.local.toml
+.rtx.toml
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+
+# Build artifacts (if testing locally)
+dist/
+build/
+*.tar.gz
+*.zip
