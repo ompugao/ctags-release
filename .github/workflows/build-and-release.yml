@@ -78,11 +78,36 @@ jobs:
         with:
           platforms: arm64
 
+      - name: Setup Docker Buildx
+        if: matrix.container
+        uses: docker/setup-buildx-action@v3
+
       - name: Checkout universal-ctags
         uses: actions/checkout@v4
         with:
           repository: universal-ctags/ctags
           ref: ${{ needs.check-release.outputs.latest_tag }}
+
+      - name: Prepare static build Dockerfile
+        if: matrix.container
+        run: |
+          cat > Dockerfile.static <<'EOF'
+          FROM debian:12 AS build
+          RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            build-essential autoconf automake pkg-config libtool libpcre2-dev zlib1g-dev liblzma-dev \
+            gettext ca-certificates git \
+            libseccomp-dev libjansson-dev libyaml-dev libxml2-dev && rm -rf /var/lib/apt/lists/*
+          WORKDIR /src
+          COPY . .
+          RUN ./autogen.sh
+          ENV LDFLAGS="-static" PKG_CONFIG="pkg-config --static"
+          RUN ./configure
+          RUN make -j$(nproc)
+          RUN ldd ./ctags || true
+          RUN ./ctags --version
+          FROM scratch AS output
+          COPY --from=build /src/ctags /ctags
+          EOF
 
 
       - name: Install dependencies (macOS)
@@ -96,42 +121,6 @@ jobs:
             libyaml \
             docutils
 
-      - name: Build universal-ctags (Linux x86_64 in Docker)
-        if: matrix.container && matrix.arch == 'x86_64'
-        run: |
-          docker run --rm -v $PWD:/src ${{ matrix.container }} bash -c "
-            export DEBIAN_FRONTEND=noninteractive && \
-            apt-get update && \
-            apt-get install -y --no-install-recommends \
-              build-essential \
-              autoconf \
-              automake \
-              pkg-config \
-              libjansson-dev \
-              libyaml-dev \
-              libxml2-dev \
-              libseccomp-dev \
-              python3-docutils \
-              binutils \
-              git && \
-            cd /src && \
-            ./autogen.sh && \
-            ./configure \
-              --prefix=/usr/local \
-              --enable-json \
-              --enable-yaml \
-              --enable-xml \
-              --enable-seccomp && \
-            make -j\$(nproc) && \
-            strip ctags && \
-            echo 'Checking binary dependencies:' && \
-            ldd ctags || true && \
-            echo 'Required glibc version:' && \
-            objdump -T ctags | grep GLIBC | sed 's/.*GLIBC_\([.0-9]*\).*/\1/g' | sort -Vu | tail -1 || true && \
-            echo 'Binary size after strip:' && \
-            ls -lh ctags
-          "
-
       - name: Build universal-ctags (macOS)
         if: startsWith(matrix.os, 'macos')
         run: |
@@ -143,41 +132,22 @@ jobs:
             --enable-xml
           make -j$(sysctl -n hw.ncpu)
 
-      - name: Build universal-ctags (Linux ARM64 in Docker)
-        if: matrix.use_qemu && matrix.container
+      - name: Build universal-ctags (Linux static via Dockerfile.static)
+        if: matrix.container
         run: |
-          docker run --rm -v $PWD:/src --platform linux/arm64 ${{ matrix.container }} bash -c "
-            export DEBIAN_FRONTEND=noninteractive && \
-            apt-get update && \
-            apt-get install -y --no-install-recommends \
-              build-essential \
-              autoconf \
-              automake \
-              pkg-config \
-              libjansson-dev \
-              libyaml-dev \
-              libxml2-dev \
-              libseccomp-dev \
-              python3-docutils \
-              binutils \
-              git && \
-            cd /src && \
-            ./autogen.sh && \
-            ./configure \
-              --prefix=/usr/local \
-              --enable-json \
-              --enable-yaml \
-              --enable-xml \
-              --enable-seccomp && \
-            make -j\$(nproc) && \
-            strip ctags && \
-            echo 'Checking binary dependencies:' && \
-            ldd ctags || true && \
-            echo 'Required glibc version:' && \
-            objdump -T ctags | grep GLIBC | sed 's/.*GLIBC_\([.0-9]*\).*/\1/g' | sort -Vu | tail -1 || true && \
-            echo 'Binary size after strip:' && \
-            ls -lh ctags
-          "
+          platform=linux/amd64
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then platform=linux/arm64; fi
+          outdir=out-${{ matrix.target }}
+          docker buildx build \
+            --platform "${platform}" \
+            -f Dockerfile.static \
+            --output=type=local,dest="${outdir}" \
+            .
+          ls -l "${outdir}"
+          cp "${outdir}/ctags" ./ctags
+          strip ./ctags || true
+          file ./ctags
+          ldd ./ctags || true
 
       - name: Create binary package
         run: |
@@ -266,16 +236,16 @@ jobs:
             ```
 
             ## Supported Platforms
-            - Linux x86_64 (glibc 2.31+, Ubuntu 20.04+, Debian 11+, RHEL 8+)
-            - Linux ARM64/aarch64 (glibc 2.31+)
+            - Linux x86_64 (fully static glibc)
+            - Linux ARM64/aarch64 (fully static glibc)
             - macOS x86_64 (Intel, macOS 13+)
             - macOS ARM64 (Apple Silicon, macOS 13+)
 
             ## Compatibility
-            - Linux binaries are built on Ubuntu 20.04 for maximum compatibility
-            - Requires glibc 2.31 or newer (Ubuntu 20.04+, Debian 11+, RHEL 8+, etc.)
-            - Static linking used where possible to minimize dependency issues
-            - If you encounter library errors, ensure your system meets the minimum requirements
+            - Linux binaries are fully statically linked with glibc using Dockerfile.static
+            - No runtime library dependencies beyond the kernel (suitable for Alpine and older glibc hosts)
+            - macOS builds are native dynamically linked binaries
+            - If you encounter issues, open an issue with your platform details
 
             ## Features
             This build includes support for:
