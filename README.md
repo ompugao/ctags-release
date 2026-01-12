@@ -10,6 +10,7 @@ This repository provides pre-built binaries of [Universal Ctags](https://github.
   - Linux ARM64 (aarch64)
   - macOS x86_64 (Intel)
   - macOS ARM64 (Apple Silicon)
+- Linux builds are fully statically linked with glibc for maximum portability
 - Built with support for:
   - JSON output (`--output-format=json`)
   - YAML output (`--output-format=yaml`)
@@ -81,20 +82,16 @@ ctags --version
 
 | Platform | Architecture | Binary Name | Minimum Requirements |
 |----------|-------------|-------------|---------------------|
-| Linux | x86_64 | `ctags-*-linux-x86_64.tar.gz` | glibc 2.31+ (Ubuntu 20.04+, Debian 11+, RHEL 8+) |
-| Linux | ARM64 | `ctags-*-linux-aarch64.tar.gz` | glibc 2.31+ |
+| Linux | x86_64 | `ctags-*-linux-x86_64.tar.gz` | Fully static glibc binary (no system glibc required) |
+| Linux | ARM64 | `ctags-*-linux-aarch64.tar.gz` | Fully static glibc binary (no system glibc required) |
 | macOS | x86_64 (Intel) | `ctags-*-darwin-x86_64.tar.gz` | macOS 13+ |
 | macOS | ARM64 (Apple Silicon) | `ctags-*-darwin-aarch64.tar.gz` | macOS 13+ |
 
 ## Compatibility Notes
 
-- **Linux binaries** are built on Ubuntu 20.04 LTS to ensure compatibility with older systems
-- Requires **glibc 2.31** or newer (check with `ldd --version`)
-- Uses static linking where possible to minimize dependency issues
-- If you encounter library errors on Linux, verify your glibc version:
-  ```bash
-  ldd --version | head -1
-  ```
+- **Linux binaries** are fully statically linked with glibc using Debian 12 + static dev libs; no runtime glibc dependency (works on Alpine or older glibc hosts)
+- macOS binaries are native dynamic builds
+- If you encounter issues, please open an issue with your platform details
 
 ## Usage
 
@@ -127,29 +124,6 @@ The mise plugin configuration allows mise to:
 - List available versions from this repository's releases
 - Download the appropriate binary for your platform
 - Install it in the mise-managed directory
-
-## Build Configuration
-
-The binaries are built with the following configuration:
-
-**Linux:**
-```bash
-./configure \
-  --prefix=/usr/local \
-  --enable-json \
-  --enable-yaml \
-  --enable-xml \
-  --enable-seccomp
-```
-
-**macOS:**
-```bash
-./configure \
-  --prefix=/usr/local \
-  --enable-json \
-  --enable-yaml \
-  --enable-xml
-```
 
 ## Updating
 
@@ -187,6 +161,8 @@ Make sure the binary has execute permissions:
 
 ```bash
 chmod +x $(which ctags)
+# if you use mise:
+chmod +x $(mise which ctags)
 ```
 
 ### Version not available
